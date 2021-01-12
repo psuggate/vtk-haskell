@@ -4,10 +4,10 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: b3d7b958f38499b0d88c27bc451f6d27f7350137b3429b997b3033e2ec057f2d
+-- hash: 2a3c17213a7d9975c5f918f97dffee572aef324aab8ed0c533dad504ca1727dc
 
 name:           vtk-haskell
-version:        0.1.2.2
+version:        0.1.2.3
 synopsis:       Basic VTK exporters
 description:    Please see the README on GitHub at <https://github.com/psuggate/vtk-haskell#readme>
 category:       Data,Numerical

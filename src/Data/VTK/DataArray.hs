@@ -13,8 +13,8 @@
 --
 -- Representations and functions for VTK, data-arrays.
 --
--- Changelog:
---  + 24/10/2020  --  initial file;
+-- == Changelog
+--  - 24/10/2020  --  initial file;
 --
 ------------------------------------------------------------------------------
 
@@ -47,8 +47,6 @@ import           GHC.Generics                (Generic)
 import           GHC.Int
 import           GHC.Word
 import           Linear                      (V3 (..))
-
--- import           Data.Bits.Handy             ((.&.), (<<%), (>>%))
 
 
 -- * Serialisation type-classes
@@ -134,14 +132,8 @@ fromVector xs = Vec.unsafeWith xs $ \p -> do
   let n = sizeOf (undefined :: a) * Vec.length xs
       f q = BS.memcpy q (castPtr p) n
       {-# INLINE f #-}
---   BL.encodeBase64 . Z.compress . BL.fromStrict <$> BS.create n f
   compressPlusHeader . BL.fromStrict <$> BS.create n f
 {-# INLINE[1] fromVector #-}
-
-{-- }
-fromText :: forall a. Storable a => Text -> IO (Vector a)
-fromText ts = do
---}
 
 
 -- * Compression

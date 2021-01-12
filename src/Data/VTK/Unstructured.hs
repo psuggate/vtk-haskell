@@ -14,8 +14,8 @@
 --
 -- Representations and functions for VTK, unstructured meshes.
 --
--- Changelog:
---  + 23/10/2020  --  initial file;
+-- == Changelog
+--  - 23/10/2020  --  initial file;
 --
 ------------------------------------------------------------------------------
 
@@ -59,8 +59,6 @@ import           Data.VTK.DataArray
 import           Data.VTK.Types
 import           Text.PrettyPrint.Leijen.Text (Doc)
 import qualified Text.PrettyPrint.Leijen.Text as P
-
--- import           Data.Text.Lazy               (Text)
 
 
 -- * Serialisation type-classes

@@ -14,8 +14,8 @@
 -- Representations and functions for ASCII representations of VTK, data-
 -- arrays, and primarily for testing purposes.
 --
--- Changelog:
---  + 26/10/2020  --  initial file;
+-- == Changelog
+--  - 26/10/2020  --  initial file;
 --
 ------------------------------------------------------------------------------
 

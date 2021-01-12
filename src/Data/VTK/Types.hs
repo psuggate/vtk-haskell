@@ -13,8 +13,8 @@
 --
 -- Representations for various VTK data types.
 --
--- Changelog:
---  + 25/10/2020  --  initial file;
+-- == Changelog
+--  - 25/10/2020  --  initial file;
 --
 ------------------------------------------------------------------------------
 
