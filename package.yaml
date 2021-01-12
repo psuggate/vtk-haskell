@@ -1,0 +1,44 @@
+name:                vtk-haskell
+version:             0.1.2.2
+github:              "githubuser/vtk-haskell"
+license:             BSD3
+author:              "Patrick Suggate"
+maintainer:          "patrick.suggate@gmail.com"
+copyright:           "2021 Patrick Suggate"
+
+extra-source-files:
+- README.md
+
+synopsis:            Basic VTK exporters
+category:            Data,Numerical
+
+description:         Please see the README on GitHub at <https://github.com/psuggate/vtk-haskell#readme>
+
+ghc-options:
+- -Wall
+
+dependencies:
+- base >= 4.7 && < 5
+- base64
+- bytestring
+- linear
+- text
+- vector
+- wl-pprint-text
+- zlib
+
+library:
+  source-dirs: src
+#   include-dirs:
+#   extra-lib-dirs:
+
+executables:
+  vtk-haskell-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - vtk-haskell

@@ -1,0 +1,68 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.33.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: b3d7b958f38499b0d88c27bc451f6d27f7350137b3429b997b3033e2ec057f2d
+
+name:           vtk-haskell
+version:        0.1.2.2
+synopsis:       Basic VTK exporters
+description:    Please see the README on GitHub at <https://github.com/psuggate/vtk-haskell#readme>
+category:       Data,Numerical
+homepage:       https://github.com/githubuser/vtk-haskell#readme
+bug-reports:    https://github.com/githubuser/vtk-haskell/issues
+author:         Patrick Suggate
+maintainer:     patrick.suggate@gmail.com
+copyright:      2021 Patrick Suggate
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/githubuser/vtk-haskell
+
+library
+  exposed-modules:
+      Data.VTK.AsciiData
+      Data.VTK.DataArray
+      Data.VTK.Types
+      Data.VTK.Unstructured
+  other-modules:
+      Paths_vtk_haskell
+  hs-source-dirs:
+      src
+  ghc-options: -Wall
+  build-depends:
+      base >=4.7 && <5
+    , base64
+    , bytestring
+    , linear
+    , text
+    , vector
+    , wl-pprint-text
+    , zlib
+  default-language: Haskell2010
+
+executable vtk-haskell-exe
+  main-is: Main.hs
+  other-modules:
+      Paths_vtk_haskell
+  hs-source-dirs:
+      app
+  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , base64
+    , bytestring
+    , linear
+    , text
+    , vector
+    , vtk-haskell
+    , wl-pprint-text
+    , zlib
+  default-language: Haskell2010

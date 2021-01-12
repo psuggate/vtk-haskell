@@ -1,0 +1,30 @@
+# Add any directories, files, or patterns you don't want to be tracked by version control
+*~
+.~*
+dist/
+dist-newstyle/
+.stack-work/
+
+# Documentation garbage
+*.pdf
+graphviz-images
+doc/*.inc.tex
+*.tex
+dist/
+graphviz-images
+
+# Old sandbox stuff
+.ghc.environment.*
+.cabal-sandbox/
+cabal.project.local
+cabal.sandbox.config
+
+# Mesh and simulation output files
+*.log
+*vtu
+*.visit
+out/
+p4est-local-exe*
+
+# Miscellaneous
+hostfile
