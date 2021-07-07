@@ -41,6 +41,7 @@ module Data.VTK.Unstructured
     -- I/O
   , renderToByteString
   , writeFileVTU
+  , readFileVTU
 
     -- Conversions
   , fromVector
@@ -247,6 +248,12 @@ renderToByteString  = E.encodeUtf8 . P.displayT . P.renderPretty 1.0 maxBound
 
 writeFileVTU :: MonadIO m => FilePath -> VTU -> m ()
 writeFileVTU fp = liftIO . BL.writeFile fp . renderToByteString . dshow
+
+readFileVTU :: MonadIO m => FilePath -> m VTU
+readFileVTU fp = liftIO $ do
+  -- readPieceVTU
+  let ps = []
+  pure $ VTU ps
 
 
 -- * Helper functions
