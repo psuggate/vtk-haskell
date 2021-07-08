@@ -28,25 +28,33 @@ module Data.VTK.DataArray
 
     -- Conversions
   , fromVector
+  , toVector
+
+  , decompress
   )
 where
 
-import qualified Codec.Compression.Zlib      as Z
-import           Control.Arrow               (second)
-import           Data.Bits                   (unsafeShiftL, unsafeShiftR, (.&.))
-import qualified Data.ByteString.Internal    as BS
-import qualified Data.ByteString.Lazy        as BL
-import qualified Data.ByteString.Lazy.Base64 as BL
-import           Data.Text.Lazy              (Text)
-import           Data.Vector.Storable        (Vector)
-import qualified Data.Vector.Storable        as Vec
+import qualified Codec.Compression.Zlib       as Z
+import           Control.Arrow                (second)
+import           Control.Monad.ST
+import           Data.Bits                    (Bits, unsafeShiftL, unsafeShiftR,
+                                               (.&.))
+import qualified Data.ByteString.Internal     as BS
+import qualified Data.ByteString.Lazy         as BL
+import qualified Data.ByteString.Lazy.Base64  as BL
+import qualified Data.Text                    as Text
+import           Data.Text.Lazy               (Text)
+import qualified Data.Text.Lazy.Encoding      as Text
 import           Data.VTK.Types
-import           Foreign.Ptr                 (castPtr)
+import           Data.Vector.Storable         (Vector)
+import qualified Data.Vector.Storable         as Vec
+import qualified Data.Vector.Storable.Mutable as Mut
+import           Foreign.Ptr                  (castPtr)
 import           Foreign.Storable
-import           GHC.Generics                (Generic)
+import           GHC.Generics                 (Generic)
 import           GHC.Int
 import           GHC.Word
-import           Linear                      (V3 (..))
+import           Linear                       (V3 (..))
 
 
 -- * Serialisation type-classes
@@ -133,7 +141,19 @@ fromVector xs = Vec.unsafeWith xs $ \p -> do
       f q = BS.memcpy q (castPtr p) n
       {-# INLINE f #-}
   compressPlusHeader . BL.fromStrict <$> BS.create n f
-{-# INLINE[1] fromVector #-}
+{-# INLINE[2] fromVector #-}
+
+-- todo: make faster, as this is fairly slow
+toVector :: forall a. Storable a => Text -> Vector a
+toVector ts = runST $ do
+  let xs = decompress $ Text.encodeUtf8 ts
+      n  = fromIntegral $ BL.length xs
+  ar <- Mut.new n
+  let go !i
+        | i  <  n   = Mut.unsafeWrite ar i (BL.index xs (fromIntegral i)) *> go (i+1)
+        | otherwise = pure ()
+  go 0
+  Vec.unsafeCast <$> Vec.unsafeFreeze ar
 
 
 -- * Compression
@@ -162,6 +182,17 @@ compressPlusHeader bs =
       -- Base64 encode header plus each block seperately, before concatenating
   in  BL.encodeBase64 hx <> BL.encodeBase64 (BL.concat cs)
 
+decompress :: BL.ByteString -> BL.ByteString
+decompress bx = BL.concat cs where
+  bs = case BL.decodeBase64 bx of
+    Left er -> error $ Text.unpack er
+    Right x -> x
+  n  = btoi 4 0 bs :: Int64
+  s  = btoi 4 4 bs :: Int64
+  -- l  = btoi 4 8 bs :: Int64 -- unused: size of last chunk
+  h  = 4*(n+3) -- header size
+  cs = Z.decompress <$> bchunks s (BL.drop h bs)
+
 
 -- * Helpers
 ------------------------------------------------------------------------------
@@ -176,3 +207,11 @@ bchunks n = go where
 w32 :: Integral i => i -> Word32
 w32  = fromIntegral
 {-# INLINE w32 #-}
+
+------------------------------------------------------------------------------
+-- | @ByteString@ to an @Integral@ type.
+btoi :: forall i. (Bits i, Integral i) => Int64 -> Int64 -> BL.ByteString -> i
+btoi n i bs = go 0 n i where
+  go :: i -> Int64 -> Int64 -> i
+  go !x 0 _ = x
+  go !x c j = go (unsafeShiftL x 8 + fromIntegral (BL.index bs j)) (c-1) (j+1)

@@ -24,7 +24,7 @@ dependencies:
 - lens
 - linear
 - megaparsec
-- scientific
+# - scientific
 - text
 - vector
 - wl-pprint-text
