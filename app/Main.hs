@@ -3,6 +3,13 @@
 module Main where
 
 import           Data.VTK.Unstructured
+import           Data.VTK.Xeno
+
+
+-- * Defaults
+------------------------------------------------------------------------------
+filePath :: FilePath
+filePath  = "unstructured.vtu"
 
 
 -- * Testing & examples
@@ -21,11 +28,13 @@ testUnstructured  = do
       pd = PointData [] [] [] [] []
       cd = CellData [] [] [] [] []
 
-  putStrLn $ show mesh
-  writeFileVTU "unstructured.vtu" mesh
+  -- putStrLn $ show mesh
+  writeFileVTU filePath mesh
 
 
 -- * Main entry-point
 ------------------------------------------------------------------------------
 main :: IO ()
-main  = testUnstructured
+main  = do
+  testUnstructured
+  () <$ parseUnstructuredMesh filePath

@@ -15,6 +15,7 @@
 --
 -- == Changelog
 --  - 25/10/2020  --  initial file;
+--  - 08/07/2021  --  refactoring to improve generality;
 --
 ------------------------------------------------------------------------------
 
@@ -37,8 +38,9 @@ import           GHC.Word
 -- * VTK data types
 ------------------------------------------------------------------------------
 -- | Type-codes for the supported VTK cell-types.
-newtype VtkCellType = VtkCellType { getVtkCellType :: Word8 }
-  deriving (Eq, Ord, Enum, Read, Show, Storable, Generic)
+newtype VtkCellType
+  = VtkCellType { getVtkCellType :: Word8 }
+  deriving (Enum, Eq, Generic, Ord, Read, Show, Storable)
 
 
 -- * Convenience patterns

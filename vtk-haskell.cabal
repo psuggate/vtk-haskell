@@ -4,10 +4,10 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 5b647dd97719d7a04b8d93b724da5c8ca95b5834614a548e4bbd0a1fce575cdf
+-- hash: 5cc1d3e79d0838386e3de80693a6b2a63e8fe2ad41145c50c921935981feef53
 
 name:           vtk-haskell
-version:        0.1.3.0
+version:        0.1.3.1
 synopsis:       Basic VTK exporters
 description:    Please see the README on GitHub at <https://github.com/psuggate/vtk-haskell#readme>
 category:       Data,Numerical
@@ -29,10 +29,12 @@ source-repository head
 library
   exposed-modules:
       Data.VTK.AsciiData
+      Data.VTK.Core
       Data.VTK.DataArray
       Data.VTK.Parser
       Data.VTK.Types
       Data.VTK.Unstructured
+      Data.VTK.Xeno
   other-modules:
       Paths_vtk_haskell
   hs-source-dirs:
@@ -46,8 +48,10 @@ library
     , linear
     , megaparsec
     , text
+    , unliftio
     , vector
     , wl-pprint-text
+    , xeno
     , zlib
   default-language: Haskell2010
 
@@ -66,8 +70,10 @@ executable vtk-haskell-exe
     , linear
     , megaparsec
     , text
+    , unliftio
     , vector
     , vtk-haskell
     , wl-pprint-text
+    , xeno
     , zlib
   default-language: Haskell2010

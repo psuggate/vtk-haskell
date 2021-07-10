@@ -61,6 +61,7 @@ import           Data.VTK.DataArray         (toVector)
 import           Data.VTK.Types             (VtkCellType (..), pattern VtkQuad)
 import           Data.Vector.Storable       (Storable, Vector)
 -- import qualified Data.Vector.Storable       as Vec
+import           Data.Typeable
 import           Data.Void                  (Void)
 import           GHC.Generics               (Generic)
 import           Linear                     (V3)
@@ -118,6 +119,13 @@ data VtkPoints
 
 data VtkCells
   = VtkCells VtkCellType (Vector Z)
+  deriving (Eq, Generic, Show)
+
+data VtkArray a
+  = VtkArray
+      { _arrayName :: Text
+      , _arrayData :: Vector a
+      }
   deriving (Eq, Generic, Show)
 
 ------------------------------------------------------------------------------
@@ -214,6 +222,26 @@ getcells  = VtkCells VtkQuad . snd <$> tagged "Cells" getarray
 
 -- ** Parse arrays
 ------------------------------------------------------------------------------
+-- | Parse a 'DataArray', and check that types are correct.
+parseArray
+  :: forall a. (Typeable a, Storable a)
+  => Parser (Maybe (VtkArray a))
+parseArray  = uncurry makeArray <$> tagged "DataArray" getarray where
+  makeArray :: TagAttrs -> Vector a -> Maybe (VtkArray a)
+  makeArray kv xs = matchTypes kv $ do
+    VtkArray <$> nameOf kv <*> pure xs
+
+  nameOf :: TagAttrs -> Maybe Text
+  nameOf (("Name", x):_) = Just x
+  nameOf (_:ys)          = nameOf ys
+  nameOf []              = Nothing
+
+  matchTypes :: TagAttrs -> Maybe (VtkArray a) -> Maybe (VtkArray a)
+  matchTypes (("Type", t):ys) k = case t of
+    "Float32" -> if typeOf (undefined :: a) == typeOf (undefined :: Float) then k else Nothing
+    "Float64" -> if typeOf (undefined :: a) == typeOf (undefined :: Double) then k else Nothing
+    _ -> Nothing
+
 getarray :: forall a. Storable a => Parser (Vector a)
 getarray  = toVector . Lazy.fromStrict <$> Mega.takeWhile1P msg b64 where
   msg :: Maybe String

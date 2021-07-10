@@ -1,5 +1,5 @@
 {-# LANGUAGE BangPatterns, DeriveGeneric, FlexibleInstances, OverloadedStrings,
-             ScopedTypeVariables #-}
+             ScopedTypeVariables, TupleSections #-}
 
 ------------------------------------------------------------------------------
 -- |
@@ -26,6 +26,10 @@ module Data.VTK.DataArray
     -- Data types
   , DataArray (..)
 
+    -- Exception-handling
+  , VtkDataIOException (..)
+  , typeErrorIO
+
     -- Conversions
   , fromVector
   , toVector
@@ -36,6 +40,7 @@ where
 
 import qualified Codec.Compression.Zlib       as Z
 import           Control.Arrow                (second)
+import           Control.Monad                (when)
 import           Control.Monad.ST
 import           Data.Bits                    (Bits, unsafeShiftL, unsafeShiftR,
                                                (.&.))
@@ -44,6 +49,7 @@ import qualified Data.ByteString.Lazy         as BL
 import qualified Data.ByteString.Lazy.Base64  as BL
 import qualified Data.Text                    as Text
 import           Data.Text.Lazy               (Text)
+import qualified Data.Text.Lazy               as Lazy
 import qualified Data.Text.Lazy.Encoding      as Text
 import           Data.VTK.Types
 import           Data.Vector.Storable         (Vector)
@@ -55,12 +61,15 @@ import           GHC.Generics                 (Generic)
 import           GHC.Int
 import           GHC.Word
 import           Linear                       (V3 (..))
+import           Text.Printf
+import           UnliftIO.Exception           (Exception, throwIO)
 
 
 -- * Serialisation type-classes
 ------------------------------------------------------------------------------
 class VtkArray a where
-  vtkArray :: Text -> a -> IO DataArray
+  encodeArray :: Text -> a -> IO DataArray
+  decodeArray :: DataArray -> IO (Text, a)
 
 
 -- * VTK data-array types
@@ -81,56 +90,67 @@ data DataArray
       }
   deriving (Generic)
 
+------------------------------------------------------------------------------
+-- | Exception handling when working with VTK arrays.
+newtype VtkDataIOException
+  = VtkDataIOException String
+  deriving (Eq, Show)
 
--- * Instances
+
+-- * Instances for various array-element types
 ------------------------------------------------------------------------------
 instance VtkArray (Vector Word8) where
-  vtkArray l xs =
+  encodeArray l xs =
     DataArray "UInt8" (Vec.length xs) 1 l <$> fromVector xs
-  {-# INLINE[2] vtkArray #-}
+  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "UInt8" t n 1 d x
 
 instance VtkArray (Vector VtkCellType) where
-  vtkArray l xs =
+  encodeArray l xs =
     DataArray "UInt8" (Vec.length xs) 1 l <$> fromVector xs
-  {-# INLINE[2] vtkArray #-}
+  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "UInt8" t n 1 d x
 
 ------------------------------------------------------------------------------
 instance VtkArray (Vector Int32) where
-  vtkArray l xs =
+  encodeArray l xs =
     DataArray "Int32" (Vec.length xs) 1 l <$> fromVector xs
-  {-# INLINE[2] vtkArray #-}
+  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Int32" t n 1 d x
 
 instance VtkArray (Vector Int64) where
-  vtkArray l xs =
+  encodeArray l xs =
     DataArray "Int64" (Vec.length xs) 1 l <$> fromVector xs
-  {-# INLINE[2] vtkArray #-}
+  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Int64" t n 1 d x
 
 instance VtkArray (Vector Int) where
-  vtkArray l xs =
+  encodeArray l xs =
     DataArray "Int64" (Vec.length xs) 1 l <$> fromVector xs
-  {-# INLINE[2] vtkArray #-}
+  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Int64" t n 1 d x
 
 ------------------------------------------------------------------------------
 instance VtkArray (Vector Float) where
-  vtkArray l xs =
+  encodeArray l xs =
     DataArray "Float32" (Vec.length xs) 1 l <$> fromVector xs
-  {-# INLINE[2] vtkArray #-}
+  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Float32" t n 1 d x
 
 instance VtkArray (Vector (V3 Float)) where
-  vtkArray l xs =
+  encodeArray l xs =
     DataArray "Float32" (Vec.length xs) 3 l <$> fromVector xs
-  {-# INLINE[2] vtkArray #-}
+  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Float32" t n 3 d x
 
 ------------------------------------------------------------------------------
 instance VtkArray (Vector Double) where
-  vtkArray l xs =
+  encodeArray l xs =
     DataArray "Float64" (Vec.length xs) 1 l <$> fromVector xs
-  {-# INLINE[2] vtkArray #-}
+  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Float64" t n 1 d x
 
 instance VtkArray (Vector (V3 Double)) where
-  vtkArray l xs =
+  encodeArray l xs =
     DataArray "Float64" (Vec.length xs) 3 l <$> fromVector xs
-  {-# INLINE[2] vtkArray #-}
+  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Float64" t n 3 d x
+
+
+-- ** Exception-handling
+------------------------------------------------------------------------------
+instance Exception VtkDataIOException
 
 
 -- * Raw data
@@ -154,6 +174,32 @@ toVector ts = runST $ do
         | otherwise = pure ()
   go 0
   Vec.unsafeCast <$> Vec.unsafeFreeze ar
+{-# INLINABLE[2] toVector #-}
+
+
+-- ** Safer functions for working with raw data
+------------------------------------------------------------------------------
+-- | Array deserialisation with exception-handling.
+--
+--   NOTE:
+--     + compares @Text@ representations of types, array dimensions, and array
+--       length (vs. the desired values) when deserialising the contents of an
+--       array;
+--
+toVectorIO
+  :: Storable a
+  => Text -> Text
+  -> Int -> Int
+  -> Int
+  -> Text
+  -> IO (Vector a)
+toVectorIO t0 t1 d0 d1 n ts = do
+  when (t0 /= t1) $ typeErrorIO t0 t1
+  when (d0 /= d1) $ dimsErrorIO d0 d1
+  let x = toVector ts
+      m = Vec.length x
+  if m /= n then sizeErrorIO n m else pure x
+{-# INLINE[2] toVectorIO #-}
 
 
 -- * Compression
@@ -192,6 +238,21 @@ decompress bx = BL.concat cs where
   -- l  = btoi 4 8 bs :: Int64 -- unused: size of last chunk
   h  = 4*(n+3) -- header size
   cs = Z.decompress <$> bchunks s (BL.drop h bs)
+
+
+-- * Exception handling
+------------------------------------------------------------------------------
+typeErrorIO :: forall a. Text -> Text -> IO a
+typeErrorIO t = throwIO . VtkDataIOException .
+  printf "array types do not match (%s /= %s)" (Lazy.unpack t) . Lazy.unpack
+
+dimsErrorIO :: forall a. Int -> Int -> IO a
+dimsErrorIO d = throwIO . VtkDataIOException .
+  printf "array dimensions do not match (%d /= %d)" d
+
+sizeErrorIO :: forall a. Int -> Int -> IO a
+sizeErrorIO d = throwIO . VtkDataIOException .
+  printf "array lengths do not match (%d /= %d)" d
 
 
 -- * Helpers
