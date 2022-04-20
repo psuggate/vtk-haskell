@@ -1,5 +1,5 @@
 name:                vtk-haskell
-version:             0.1.3.1
+version:             0.1.3.3
 github:              "githubuser/vtk-haskell"
 license:             BSD3
 author:              "Patrick Suggate"
@@ -21,6 +21,7 @@ dependencies:
 - base >= 4.7 && < 5
 - base64
 - bytestring
+- deepseq
 - lens
 - linear
 - megaparsec
@@ -46,4 +47,17 @@ executables:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
+    - vtk-haskell
+
+tests:
+  vtk-haskell-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -rtsopts
+#     - -threaded
+#     - -with-rtsopts=-N
+    dependencies:
+    - hspec
+    - random
     - vtk-haskell

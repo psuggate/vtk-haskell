@@ -30,6 +30,7 @@ module Data.VTK.Types
   )
 where
 
+import           Control.DeepSeq  (NFData)
 import           Foreign.Storable
 import           GHC.Generics     (Generic)
 import           GHC.Word
@@ -40,7 +41,7 @@ import           GHC.Word
 -- | Type-codes for the supported VTK cell-types.
 newtype VtkCellType
   = VtkCellType { getVtkCellType :: Word8 }
-  deriving (Enum, Eq, Generic, Ord, Read, Show, Storable)
+  deriving (Enum, Eq, Generic, NFData, Ord, Read, Show, Storable)
 
 
 -- * Convenience patterns

@@ -1,30 +1,33 @@
 {-# LANGUAGE DeriveGeneric, DerivingStrategies, DerivingVia,
              GeneralisedNewtypeDeriving, OverloadedStrings #-}
+
 module Data.VTK.Xeno
   (
     parseUnstructuredMesh
+  , parseUnstructuredMeshFile
   , unstructuredGrid
   , VtkFile (..)
   )
 where
 
-import           Control.Applicative   (Alternative)
-import           Control.Monad         (unless)
-import qualified Data.ByteString.Char8 as BS
-import qualified Data.Char             as Char
-import           GHC.Generics          (Generic)
+import           Control.Arrow              ((***), (<<<))
+import           Control.Monad              (unless, (>=>))
+import qualified Data.ByteString.Char8      as BS
+import qualified Data.ByteString.Lazy.Char8 as BL
+import qualified Data.Char                  as Char
+import qualified Data.Text.Lazy.Encoding    as Text
+import           Data.VTK.Core              as VTK
+import           GHC.Generics               (Generic)
 import           Text.Printf
 import           UnliftIO.Exception
-import           Xeno.DOM              as Xeno
-
-import           Data.VTK.Core         as VTK
+import           Xeno.DOM                   as Xeno
 
 
 -- * VTK parser data-types
 ------------------------------------------------------------------------------
 newtype VtkFile
   = VtkFile { pieces :: [Piece] }
-  deriving (Monoid, Semigroup)
+  deriving (Eq, Generic, Monoid, Semigroup, Show)
 
 newtype VtkParseException
   = VtkParseException { _showVtkParseException :: String }
@@ -40,37 +43,49 @@ instance Exception VtkParseException
 
 -- * Top-level parsers
 ------------------------------------------------------------------------------
-parseUnstructuredMesh :: FilePath -> IO (Maybe VtkFile)
-parseUnstructuredMesh file = do
-  bs <- BS.readFile file
-  case Xeno.parse bs of
+parseUnstructuredMeshFile :: FilePath -> IO VtkFile
+parseUnstructuredMeshFile  = BS.readFile >=> parseUnstructuredMesh
+-- parseUnstructuredMeshFile  = parseUnstructuredMesh <<< BS.readFile
+
+parseUnstructuredMesh :: BS.ByteString -> IO VtkFile
+parseUnstructuredMesh bs = do
+  -- bs <- BS.readFile file
+  vt <- case Xeno.parse bs of
     -- Left er -> throwIO $ VtkParseException $ displayException er
     Left er -> throwIO er
-    Right x -> do
-      print x
-      let attrs = attributes x
-      unless (checkAttrs attrs) $ do
-        throwIO $ VtkParseException $ printf "invalid attributes: %s" (show attrs)
---       _ <- unstructuredGrid x
-      pure Nothing
+    Right x -> pure x
+
+  let label = BS.unpack $ name vt
+  unless (label == "VTKFile") $ do
+    print vt
+    throwIO $ VtkParseException $ printf "unexpected top-level node: '%s'" label
+
+  let attrs = attributes vt
+  unless (checkAttrs attrs) $ do
+    mapM_ (putStrLn . (uncurry $ printf "  %s: %s") <<< BS.unpack *** show) attrs
+    throwIO $ VtkParseException $ printf "invalid attributes: %s" (show attrs)
+
+  let nodes = children vt
+      child = head nodes
+  unless (length nodes == 1) $ do
+    throwIO $ VtkParseException $ printf "only one mesh expected"
+
+  case unstructuredGrid child of
+    Left er -> throwIO er
+    Right x -> pure $ VtkFile x
 
 ------------------------------------------------------------------------------
 unstructuredGrid :: Xeno.Node -> Either VtkParseException [Piece]
 unstructuredGrid node
-  | name node == "UnstructuredGrid"
-  , null (attributes node)
-  , null (textOf node) = sequence $ getPiece <$> children node
-  | otherwise          = throwE "invalid 'UnstructuredGrid'"
-
-{-- }
-unstructuredGrid' :: [Xeno.Content] -> Either VtkParseException [Piece]
-unstructuredGrid' content
-  |
-
-  , null (attributes node)
-  , null (textOf node) = sequence $ getPiece <$> children node
-  | otherwise          = throwE "invalid 'UnstructuredGrid'"
---}
+  | label /= "UnstructuredGrid" = throwE $ printf "unexpected node: '%s'" label
+  | not (null attrs)   = throwE $ printf "unexpected attributes:\n%s" attrs
+  | null (textOf node) = sequence $ getPiece <$> children node
+  | otherwise          = throwE $ printf "unexpected text/body:\n%s" text
+  where
+    label = BS.unpack $ name node
+    attrs = unlines $ (uncurry fmt <<< BS.unpack *** show) <$> attributes node
+    fmt   = printf "  %s: %s"
+    text  = BS.unpack . BS.unlines $ textOf node
 
 
 -- ** Piece-parsers
@@ -82,9 +97,11 @@ getPiece node
   where
     label = name node
     nodes = children node
-    ps = element "Points" getPoints nodes
+    ps = node `itsOnly` "Points" >>= getPoints
+    -- ps = element "Points" getPoints nodes
     pd = optional "PointData" (Right mempty) getPointData nodes
-    cs = element "Cells" getCells nodes
+    cs = node `itsOnly` "Cells" >>= getCells
+    -- cs = element "Cells" getCells nodes
     cd = optional "CellData" (Right mempty) getCellData nodes
 
 
@@ -95,56 +112,67 @@ getPoints node
   | name node == "Points"
   , null (attributes node)
   , length nodes == 1
-  , null (textOf node) = getPoints' (head nodes)
+  , null (textOf node) = getPointsOf (head nodes)
   | otherwise = throwE "invalid 'Points'"
   where
     nodes = children node
 
-getPoints' :: Xeno.Node -> Either VtkParseException Points
-getPoints' node
-  | length nodes == 1
-  , null (textOf node) = case name node of
-      "Coordinates" -> if null attrs
-        then PointsStriped <$> getCoords' (contents node)
+getPointsOf :: Xeno.Node -> Either VtkParseException Points
+getPointsOf node
+  | null (textOf node) = case name node of
+      "Coordinates" -> if null attrs && length nodes == 3
+        then PointsStriped <$> getCoords' node
         else throwE "invalid (striped) 'Coordinates'"
       "DataArray" -> if length attrs >= 3
         then PointsChunked <$> getDataArray node
         else throwE "invalid (chunked) 'Points'"
+      _ -> throwE . printf "unexpected node '%s'" . BS.unpack $ name node
   | otherwise = throwE "invalid 'Points' element"
   where
     nodes = children node
     attrs = attributes node
 
-getCoords' :: [Xeno.Content] -> Either VtkParseException Coordinates
-getCoords'  = undefined
+getCoords' :: Xeno.Node -> Either VtkParseException Coordinates
+getCoords' node = Coordinates <$> getDataArrayNamed "xcoords" nodes
+                              <*> getDataArrayNamed "ycoords" nodes
+                              <*> getDataArrayNamed "zcoords" nodes
+  where
+    nodes = children node
 
 
 -- ** Parsers for point-data
 ------------------------------------------------------------------------------
 getPointData :: Xeno.Node -> Either VtkParseException PointData
-getPointData  = undefined
+getPointData  = const (pure mempty)
 
 
 -- ** Cells parsers
 ------------------------------------------------------------------------------
 getCells :: Xeno.Node -> Either VtkParseException Cells
-getCells  = undefined
+getCells node = Cells
+                <$> getDataArrayNamed "connectivity" nodes
+                <*> getDataArrayNamed "offsets" nodes
+                <*> getDataArrayNamed "types" nodes
+  where
+    nodes = children node
 
 
 -- ** Parsers for cell-data
 ------------------------------------------------------------------------------
 getCellData :: Xeno.Node -> Either VtkParseException CellData
-getCellData  = undefined
+getCellData  = const (pure mempty)
 
 
 -- * Building-blocks parsers
 ------------------------------------------------------------------------------
+{-- }
 element
   :: BS.ByteString
   -> (Xeno.Node -> Either VtkParseException a)
   -> [Xeno.Node]
   -> Either VtkParseException a
 element label = label `optional` throwE ("Cannot find element " ++ show label)
+--}
 
 optional
   :: BS.ByteString
@@ -158,44 +186,47 @@ optional label missing parser = go where
     | name n == label = parser n
     | otherwise       = go ns
 
-itsOnly :: Xeno.Node -> BS.ByteString -> Either VtkParseException Xeno.Node
-itsOnly node label
-  | null found       = throwE $ printf "node '%s' not found as child of '%s'" label' parent
-  | length found > 1 = throwE $ printf "too many child nodes of '%s' with name '%s'" parent label'
-  | otherwise        = Right $ head found
-  where
-    found  = ((== label) . name) `filter` children node
-    label' = BS.unpack label
-    parent = BS.unpack (name node)
 
+-- ** Parsers for @DataArray@'s
+------------------------------------------------------------------------------
 getDataArray :: Xeno.Node -> Either VtkParseException DataArray
 getDataArray node
   | name node == "DataArray"
-  , length attrs >= 3 = undefined
+  , length attrs >= 3 = fmap setArrayProps $ DataArray
+                        <$> ltext `fmap` getAttribute "type" attrs
+                        <*> pure (-1)
+                        <*> pure (-1)
+                        <*> ltext `fmap` getAttribute "Name" attrs
+                        <*> (pure . ltext . BS.concat . textOf) node
   | otherwise = throwE "invalid 'DataArray'"
   where
+    ltext = Text.decodeUtf8 . BL.fromStrict
     attrs = attributes node
 
-
-{-- }
--- * Convert XML into VTK representation
-------------------------------------------------------------------------------
--- | Check and process the contents of the XML file.
-xmlToVtk :: Node -> VtkFile
-xmlToVtk node
-  | label=="VTKFile"
-  , checkAttrs attrs = VtkFile $ go nodes
-  | otherwise        = mempty
+getDataArrayNamed
+  :: BS.ByteString
+  -> [Xeno.Node]
+  -> Either VtkParseException DataArray
+getDataArrayNamed label nodes
+  | length ns == 1 = getDataArray $ head ns
+  | null ns        = throwE $ printf "'DataArray' named '%s' not found" l'
+  | otherwise      = throwE $ printf "expected just one '%s' array" l'
   where
-    label = name node
-    attrs = attributes node
-    nodes = children node
+    ns = filter (\n ->
+                    name n == "DataArray" &&
+                    hasAttributeValue "Name" label n
+                ) nodes
+    l' = BS.unpack label
 
-parsePiece :: Node -> Either String Piece
-parsePiece node
-  | label=="Piece" = Right $ Piece ps pd cs cd
-  | otherwise
---}
+
+-- ** Attribute queries and parsers
+------------------------------------------------------------------------------
+getAttribute :: BS.ByteString -> XmlAttrs -> Either VtkParseException BS.ByteString
+getAttribute key = maybe err Right . lookup key where
+  err = throwE $ printf "attribute '%s' not found" $ BS.unpack key
+
+hasAttributeValue :: BS.ByteString -> BS.ByteString -> Xeno.Node -> Bool
+hasAttributeValue k v = maybe False (== v) . lookup k . attributes
 
 checkAttrs :: [(BS.ByteString, BS.ByteString)] -> Bool
 checkAttrs         []  = True
@@ -209,20 +240,28 @@ checkAttrs ((k, v):xs) = case k of
 
 -- * Helpers
 ------------------------------------------------------------------------------
-textOf :: Xeno.Node -> [Xeno.Content]
-textOf  = filter go . contents where
-  go (Text ts) = not (allSpaces ts)
-  go _         = False
-
-{--}
-dropSpaces :: [Xeno.Content] -> [Xeno.Content]
-dropSpaces (Text ts:cs)
-  | allSpaces ts = dropSpaces cs
-  | otherwise    = undefined
---}
+textOf :: Xeno.Node -> [BS.ByteString]
+textOf  = go . contents where
+  go         []   = []
+  go (Text t:ts)
+    | allSpaces t = go ts
+    | otherwise   = t:go ts
+  go (     _:ts)  = go ts
 
 allSpaces :: BS.ByteString -> Bool
 allSpaces  = BS.all Char.isSpace
 
+-- ** Queries & exceptions
+------------------------------------------------------------------------------
 throwE :: String -> Either VtkParseException a
 throwE  = Left . VtkParseException
+
+itsOnly :: Xeno.Node -> BS.ByteString -> Either VtkParseException Xeno.Node
+itsOnly node label
+  | null found       = throwE $ printf "node '%s' not found as child of '%s'" label' parent
+  | length found > 1 = throwE $ printf "too many child nodes of '%s' with name '%s'" parent label'
+  | otherwise        = Right $ head found
+  where
+    found  = ((== label) . name) `filter` children node
+    label' = BS.unpack label
+    parent = BS.unpack (name node)

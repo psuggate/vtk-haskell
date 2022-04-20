@@ -1,6 +1,6 @@
-{-# LANGUAGE DeriveGeneric, FlexibleInstances, GADTs, LambdaCase,
-             OverloadedStrings, PatternSynonyms, ScopedTypeVariables,
-             TemplateHaskell, TupleSections #-}
+{-# LANGUAGE DeriveAnyClass, DeriveGeneric, FlexibleInstances, GADTs,
+             LambdaCase, OverloadedStrings, PatternSynonyms,
+             ScopedTypeVariables, TemplateHaskell, TupleSections #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 ------------------------------------------------------------------------------
@@ -42,15 +42,13 @@ module Data.VTK.Core
   )
 where
 
+import           Control.DeepSeq              (NFData)
 import qualified Data.Text.Lazy               as L
--- import           Foreign.Storable
--- import           GHC.Generics                 (Generic)
--- import           GHC.Word
-import           Text.PrettyPrint.Leijen.Text (Doc)
-import qualified Text.PrettyPrint.Leijen.Text as P
-
 import           Data.VTK.DataArray
 import           Data.VTK.Types
+import           GHC.Generics                 (Generic)
+import           Text.PrettyPrint.Leijen.Text (Doc)
+import qualified Text.PrettyPrint.Leijen.Text as P
 
 
 -- * Serialisation type-classes
@@ -64,6 +62,7 @@ class VtkDoc a where
 -- | Mesh substructures.
 data Piece
   = Piece !Points !PointData !Cells !CellData
+  deriving (Eq, Generic, NFData, Show)
 
 
 -- ** Vertex data
@@ -71,6 +70,7 @@ data Piece
 data Points
   = PointsChunked !DataArray
   | PointsStriped !Coordinates
+  deriving (Eq, Generic, NFData, Show)
 
 ------------------------------------------------------------------------------
 -- | Coordinates of vertices ('Points') are required to have three (spatial)
@@ -81,6 +81,7 @@ data Coordinates
       , ycoords :: !DataArray
       , zcoords :: !DataArray
       }
+  deriving (Eq, Generic, NFData, Show)
 
 data PointData
   = PointData
@@ -90,6 +91,7 @@ data PointData
       , ptensors :: [DataArray]
       , ptcoords :: [DataArray]
       }
+  deriving (Eq, Generic, NFData, Show)
 
 
 -- ** Polygon data
@@ -101,6 +103,7 @@ data Cells
       , cellOffsets  :: !DataArray
       , cellTypes    :: !DataArray
       }
+  deriving (Eq, Generic, NFData, Show)
 
 data CellData
   = CellData
@@ -110,17 +113,7 @@ data CellData
       , ctensors :: [DataArray]
       , ctcoords :: [DataArray]
       }
-
-instance VtkDoc Piece where
-  dshow (Piece ps pd cs cd) =
-    let px = P.angles $ "Piece " <> np <> P.char ' ' <> nc
-        np = "NumberOfPoints=" <> quotes (numPoints ps)
-        nc = "NumberOfCells=" <> quotes (numCells cs)
-    in  P.nest 2 (px        P.<$>
-                  dshow ps  P.<$>
-                  dshow pd  P.<$>
-                  dshow cs  P.<$>
-                  dshow cd) P.<$> "</Piece>"
+  deriving (Eq, Generic, NFData, Show)
 
 
 -- * Instances
@@ -196,6 +189,19 @@ instance VtkDoc DataArray where
         atr = typ <> nam <> noc <> "format=\"binary\""
         hdr = P.angles $ "DataArray " <> atr :: Doc
     in  P.nest 2 (hdr P.<$> P.text xs) P.<$> "</DataArray>"
+
+------------------------------------------------------------------------------
+-- | Pretty-print pieces of a VTU.
+instance VtkDoc Piece where
+  dshow (Piece ps pd cs cd) =
+    let px = P.angles $ "Piece " <> np <> P.char ' ' <> nc
+        np = "NumberOfPoints=" <> quotes (numPoints ps)
+        nc = "NumberOfCells=" <> quotes (numCells cs)
+    in  P.nest 2 (px        P.<$>
+                  dshow ps  P.<$>
+                  dshow pd  P.<$>
+                  dshow cs  P.<$>
+                  dshow cd) P.<$> "</Piece>"
 
 
 -- * Smart constructors

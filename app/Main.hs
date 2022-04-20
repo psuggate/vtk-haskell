@@ -2,8 +2,8 @@
 
 module Main where
 
-import           Data.VTK.Unstructured
-import           Data.VTK.Xeno
+import           Data.VTK.Unstructured as Unst
+import qualified Data.VTK.Xeno         as Xeno
 
 
 -- * Defaults
@@ -29,7 +29,7 @@ testUnstructured  = do
       cd = CellData [] [] [] [] []
 
   -- putStrLn $ show mesh
-  writeFileVTU filePath mesh
+  Unst.writeFileVTU filePath mesh
 
 
 -- * Main entry-point
@@ -37,4 +37,5 @@ testUnstructured  = do
 main :: IO ()
 main  = do
   testUnstructured
-  () <$ parseUnstructuredMesh filePath
+  vtu <- VTU . Xeno.pieces <$> Xeno.parseUnstructuredMeshFile filePath
+  Unst.writeFileVTU (filePath ++ ".xml") vtu

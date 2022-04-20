@@ -1,5 +1,5 @@
-{-# LANGUAGE BangPatterns, DeriveGeneric, FlexibleInstances, OverloadedStrings,
-             ScopedTypeVariables, TupleSections #-}
+{-# LANGUAGE BangPatterns, DeriveAnyClass, DeriveGeneric, FlexibleInstances,
+             OverloadedStrings, ScopedTypeVariables, TupleSections #-}
 
 ------------------------------------------------------------------------------
 -- |
@@ -33,13 +33,16 @@ module Data.VTK.DataArray
     -- Conversions
   , fromVector
   , toVector
+  , toVectorIO
 
   , decompress
+  , setArrayProps
   )
 where
 
 import qualified Codec.Compression.Zlib       as Z
 import           Control.Arrow                (second)
+import           Control.DeepSeq              (NFData)
 import           Control.Monad                (when)
 import           Control.Monad.ST
 import           Data.Bits                    (Bits, unsafeShiftL, unsafeShiftR,
@@ -88,13 +91,13 @@ data DataArray
       , arrayName :: !Text
       , arrayData :: !Text
       }
-  deriving (Generic)
+  deriving (Eq, Generic, NFData, Show)
 
 ------------------------------------------------------------------------------
 -- | Exception handling when working with VTK arrays.
 newtype VtkDataIOException
   = VtkDataIOException String
-  deriving (Eq, Show)
+  deriving (Eq, Generic, Show)
 
 
 -- * Instances for various array-element types
@@ -165,15 +168,17 @@ fromVector xs = Vec.unsafeWith xs $ \p -> do
 
 -- todo: make faster, as this is fairly slow
 toVector :: forall a. Storable a => Text -> Vector a
-toVector ts = runST $ do
-  let xs = decompress $ Text.encodeUtf8 ts
-      n  = fromIntegral $ BL.length xs
-  ar <- Mut.new n
-  let go !i
-        | i  <  n   = Mut.unsafeWrite ar i (BL.index xs (fromIntegral i)) *> go (i+1)
-        | otherwise = pure ()
-  go 0
-  Vec.unsafeCast <$> Vec.unsafeFreeze ar
+toVector ts
+  | Lazy.null ts = Vec.empty
+  | otherwise    = runST $ do
+      let xs = decompress $ Text.encodeUtf8 ts
+          n  = fromIntegral $ BL.length xs
+      ar <- Mut.new n
+      let go !i
+            | i  <  n   = Mut.unsafeWrite ar i (BL.index xs (fromIntegral i)) *> go (i+1)
+            | otherwise = pure ()
+      go 0
+      Vec.unsafeCast <$> Vec.unsafeFreeze ar
 {-# INLINABLE[2] toVector #-}
 
 
@@ -225,6 +230,10 @@ compressPlusHeader bs =
       os = Vec.fromList . map w32 $ [n, s, o] ++ BL.length `map` cs
       hx = BL.pack . Vec.toList $ Vec.unsafeCast os
 
+      w32 :: Integral i => i -> Word32
+      w32  = fromIntegral
+      {-# INLINE w32 #-}
+
       -- Base64 encode header plus each block seperately, before concatenating
   in  BL.encodeBase64 hx <> BL.encodeBase64 (BL.concat cs)
 
@@ -263,11 +272,6 @@ bchunks n = go where
   go :: BL.ByteString -> [BL.ByteString]
   go !bs | BL.null bs = []
          | otherwise  = uncurry (:) . second go $ BL.splitAt n bs
-{-# INLINE bchunks #-}
-
-w32 :: Integral i => i -> Word32
-w32  = fromIntegral
-{-# INLINE w32 #-}
 
 ------------------------------------------------------------------------------
 -- | @ByteString@ to an @Integral@ type.
@@ -276,3 +280,24 @@ btoi n i bs = go 0 n i where
   go :: i -> Int64 -> Int64 -> i
   go !x 0 _ = x
   go !x c j = go (unsafeShiftL x 8 + fromIntegral (BL.index bs j)) (c-1) (j+1)
+
+------------------------------------------------------------------------------
+-- | Set the array-length and dimensions using the indicated element-type, and
+--   array-data.
+setArrayProps :: DataArray -> DataArray
+setArrayProps (DataArray typ _ _ label tx) =
+  let xs = toVector tx :: Vector Word8
+      n  = Vec.length xs
+      s  = case typ of
+        "UInt8"   -> 1
+        "UInt16"  -> 2
+        "UInt32"  -> 4
+        "UInt64"  -> 8
+        "Int8"    -> 1
+        "Int16"   -> 2
+        "Int32"   -> 4
+        "Int64"   -> 8
+        "Float32" -> 4
+        "Float64" -> 8
+        _         -> -1
+  in  DataArray typ (n `div` s) 1 label tx

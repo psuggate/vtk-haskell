@@ -1,4 +1,5 @@
-{-# LANGUAGE FlexibleInstances, GADTs, LambdaCase, OverloadedStrings,
+{-# LANGUAGE DeriveGeneric, FlexibleInstances, GADTs,
+             GeneralisedNewtypeDeriving, LambdaCase, OverloadedStrings,
              ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -45,13 +46,15 @@ module Data.VTK.Unstructured
   )
 where
 
+import           Control.DeepSeq              (NFData)
 import           Control.Monad.IO.Class
 import qualified Data.ByteString.Lazy         as BL
 import qualified Data.Text.Lazy.Encoding      as E
+import           Data.VTK.Core
+import qualified Data.VTK.Xeno                as Xeno
+import           GHC.Generics                 (Generic)
 import           Text.PrettyPrint.Leijen.Text (Doc)
 import qualified Text.PrettyPrint.Leijen.Text as P
-
-import           Data.VTK.Core
 
 
 -- * VTK data types
@@ -59,6 +62,7 @@ import           Data.VTK.Core
 -- | Top-level, unstructured-mesh data type.
 newtype VTU
   = VTU [Piece]
+  deriving (Eq, Generic, NFData)
 
 
 -- * Instances
@@ -80,7 +84,6 @@ instance VtkDoc VTU where
 ------------------------------------------------------------------------------
 version :: Doc
 version  = "<?xml version=\"1.0\"?>"
-{-# INLINE[2] version #-}
 
 vtkfile :: Doc -> Doc
 vtkfile doc = version P.<$> P.nest 2 (hdr P.<$> doc) P.<$> "</VTKFile>" where
@@ -89,7 +92,6 @@ vtkfile doc = version P.<$> P.nest 2 (hdr P.<$> doc) P.<$> "</VTKFile>" where
   ver = "version=\"0.1\" "
   cmp = "compressor=\"vtkZLibDataCompressor\" "
   b_o = "byte_order=\"LittleEndian\">"
-{-# INLINE[2] vtkfile #-}
 
 
 -- * I/O
@@ -98,11 +100,10 @@ renderToByteString :: Doc -> BL.ByteString
 -- renderToByteString  = E.encodeUtf8 . P.displayT . P.renderOneLine
 renderToByteString  = E.encodeUtf8 . P.displayT . P.renderPretty 1.0 maxBound
 
+------------------------------------------------------------------------------
 writeFileVTU :: MonadIO m => FilePath -> VTU -> m ()
 writeFileVTU fp = liftIO . BL.writeFile fp . renderToByteString . dshow
 
 readFileVTU :: MonadIO m => FilePath -> m VTU
 readFileVTU fp = liftIO $ do
-  -- readPieceVTU
-  let ps = []
-  pure $ VTU ps
+  VTU . Xeno.pieces <$> Xeno.parseUnstructuredMeshFile fp

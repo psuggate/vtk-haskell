@@ -1,6 +1,6 @@
-{-# LANGUAGE DeriveGeneric, FlexibleInstances, GADTs, LambdaCase,
-             OverloadedStrings, PatternSynonyms, ScopedTypeVariables,
-             TemplateHaskell, TupleSections #-}
+{-# LANGUAGE DeriveAnyClass, DeriveGeneric, FlexibleInstances, GADTs,
+             LambdaCase, OverloadedStrings, PatternSynonyms,
+             ScopedTypeVariables, TemplateHaskell, TupleSections #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 ------------------------------------------------------------------------------
@@ -50,18 +50,17 @@ module Data.VTK.Parser (
   )
 where
 
+import           Control.DeepSeq            (NFData)
 import           Control.Lens               (makeLenses, makePrisms, set, (^.))
--- import           Data.Scientific
 import qualified Data.Char                  as Char
 import           Data.Text                  (Text)
 import qualified Data.Text                  as Text
 import qualified Data.Text.IO               as Text
 import qualified Data.Text.Lazy             as Lazy
+import           Data.Typeable
 import           Data.VTK.DataArray         (toVector)
 import           Data.VTK.Types             (VtkCellType (..), pattern VtkQuad)
 import           Data.Vector.Storable       (Storable, Vector)
--- import qualified Data.Vector.Storable       as Vec
-import           Data.Typeable
 import           Data.Void                  (Void)
 import           GHC.Generics               (Generic)
 import           Linear                     (V3)
@@ -75,6 +74,7 @@ import qualified Text.Megaparsec.Char.Lexer as Lex
 type Parser = Parsec Void Text
 type ParserErrorBundle = ParseErrorBundle Text Void
 
+
 -- ** Convenience aliases (not exported)
 ------------------------------------------------------------------------------
 type R = Double
@@ -85,48 +85,53 @@ type Z = Int
 ------------------------------------------------------------------------------
 data VtkFile
   = VtkFile
-      { _vtkAttrs  :: VtkAttrs
+      { _vtkAttrs  :: !VtkAttrs
       , _vtkPieces :: [VtkPiece]
       }
-  deriving (Eq, Generic, Show)
+  deriving (Eq, Generic, NFData, Show)
 
+------------------------------------------------------------------------------
 data VtkType
   = VtkUnstructuredGrid
   | VtkTypeUnknown
-  deriving (Enum, Eq, Generic, Ord, Show)
+  deriving (Enum, Eq, Generic, NFData, Ord, Show)
 
 data VtkAttrs
   = VtkAttrs
-      { _vtkType       :: VtkType
-      , _vtkVersion    :: Text
-      , _vtkCompressor :: Text
+      { _vtkType       :: !VtkType
+      , _vtkVersion    :: !Text
+      , _vtkCompressor :: !Text
       , _vtkByteOrder  :: ()
       }
-  deriving (Eq, Generic, Show)
+  deriving (Eq, Generic, NFData, Show)
 
+------------------------------------------------------------------------------
 data VtkPiece
   = VtkPiece
-      { _pieceType   :: VtkType
-      , _piecePoints :: VtkPoints
-      , _pieceCells  :: VtkCells
+      { _pieceType   :: !VtkType
+      , _piecePoints :: !VtkPoints
+      , _pieceCells  :: !VtkCells
       }
-  deriving (Eq, Generic, Show)
+  deriving (Eq, Generic, NFData, Show)
 
 data VtkPoints
-  = VtkPointsChunked (Vector (V3 R))
-  | VtkPointsStriped (Vector R) (Vector R) (Vector R)
-  deriving (Eq, Generic, Show)
+  = VtkPointsChunked !(Vector (V3 R))
+  | VtkPointsStriped !(Vector R) !(Vector R) !(Vector R)
+  deriving (Eq, Generic, NFData, Show)
 
 data VtkCells
-  = VtkCells VtkCellType (Vector Z)
-  deriving (Eq, Generic, Show)
+  = VtkCells !VtkCellType !(Vector Z)
+  deriving (Eq, Generic, NFData, Show)
 
+------------------------------------------------------------------------------
+-- | Stores an array of elements of a suitable VTK-type, @a@.
+--   TODO:
 data VtkArray a
   = VtkArray
-      { _arrayName :: Text
-      , _arrayData :: Vector a
+      { _arrayName :: !Text
+      , _arrayData :: !(Vector a)
       }
-  deriving (Eq, Generic, Show)
+  deriving (Eq, Generic, NFData, Show)
 
 ------------------------------------------------------------------------------
 -- | For representing generic XML metadata.
