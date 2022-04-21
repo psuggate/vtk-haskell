@@ -199,7 +199,7 @@ toVectorIO
   -> Text
   -> IO (Vector a)
 toVectorIO t0 t1 d0 d1 n ts = do
-  print ts
+  -- print ts
   when (t0 /= t1) $ typeErrorIO t0 t1
   when (d0 /= d1) $ dimsErrorIO d0 d1
   let x = toVector ts

@@ -45,13 +45,10 @@ instance Exception VtkParseException
 ------------------------------------------------------------------------------
 parseUnstructuredMeshFile :: FilePath -> IO VtkFile
 parseUnstructuredMeshFile  = BS.readFile >=> parseUnstructuredMesh
--- parseUnstructuredMeshFile  = parseUnstructuredMesh <<< BS.readFile
 
 parseUnstructuredMesh :: BS.ByteString -> IO VtkFile
 parseUnstructuredMesh bs = do
-  -- bs <- BS.readFile file
   vt <- case Xeno.parse bs of
-    -- Left er -> throwIO $ VtkParseException $ displayException er
     Left er -> throwIO er
     Right x -> pure x
 
@@ -69,6 +66,8 @@ parseUnstructuredMesh bs = do
       child = head nodes
   unless (length nodes == 1) $ do
     throwIO $ VtkParseException $ printf "only one mesh expected"
+
+  -- print child
 
   case unstructuredGrid child of
     Left er -> throwIO er
@@ -144,6 +143,7 @@ getCoords' node = Coordinates <$> getDataArrayNamed "xcoords" nodes
 ------------------------------------------------------------------------------
 getPointData :: Xeno.Node -> Either VtkParseException PointData
 getPointData  = const (pure mempty)
+{-# WARNING getPointData "STUB" #-}
 
 
 -- ** Cells parsers
@@ -161,6 +161,7 @@ getCells node = Cells
 ------------------------------------------------------------------------------
 getCellData :: Xeno.Node -> Either VtkParseException CellData
 getCellData  = const (pure mempty)
+{-# WARNING getCellData "STUB" #-}
 
 
 -- * Building-blocks parsers
@@ -242,14 +243,15 @@ checkAttrs ((k, v):xs) = case k of
 ------------------------------------------------------------------------------
 textOf :: Xeno.Node -> [BS.ByteString]
 textOf  = go . contents where
-  go         []   = []
+  go         []  = []
   go (Text t:ts)
-    | allSpaces t = go ts
-    | otherwise   = t:go ts
-  go (     _:ts)  = go ts
+    | BS.null t' = go ts
+    | otherwise  = t':go ts
+    where t'     = BS.filter (not . Char.isSpace) t
+  go (     _:ts) = go ts
 
-allSpaces :: BS.ByteString -> Bool
-allSpaces  = BS.all Char.isSpace
+-- allSpaces :: BS.ByteString -> Bool
+-- allSpaces  = BS.all Char.isSpace
 
 -- ** Queries & exceptions
 ------------------------------------------------------------------------------

@@ -32,18 +32,11 @@ spec  = context "VTK data arrays" $ do
       DA.btoi 4 4 bx `shouldBe` (65*16777216 + 65*65536 + 65*256 + 65 :: Int64)
 
     it "can compute header size of compressed binary data" $ do
-      let lh = headerLength bs
-      -- print $ BL.length . BL.decodeBase64Lenient $ BL.takeWhile (/= eq) bs
-      lh `shouldBe` 16
+      headerLength bs `shouldBe` 16
 
-    it "can extract the header values of compressed binary data" $ do
-      let hx = headerValues bs
-      -- print hx
-      hx `shouldBe` ([1, 32768, 4, 12], 24)
-
-    it "can extract the header of compressed binary data" $ do
-      let bx = snd $ splitAtHeader bs
-      -- print bx
+    it "can extract the header & body of compressed binary data" $ do
+      let (hx, bx) = splitAtHeader bs
+      hx `shouldBe` [1, 32768, 4, 12]
       bx `shouldBe` BL.drop 24 bs
 
     it "can convert between Haskell Vectors and DataArrays" $ do
@@ -65,3 +58,24 @@ spec  = context "VTK data arrays" $ do
       xa <- encodeArray "xcoords" xr
       xs <- snd <$> decodeArray xa
       xs `shouldBe` xr
+
+    it "can encode then decode arrays that make a unit square" $ do
+      let xs = Vec.fromList [0.0, 1.0, 1.0, 0.0 :: Float]
+          ys = Vec.fromList [0.0, 0.0, 1.0, 1.0 :: Float]
+          zs = Vec.fromList [0.0, 0.0, 0.0, 0.0 :: Float]
+      dx <- encodeArray "xcoords" xs >>= fmap snd . decodeArray
+      dx `shouldBe` xs
+      dy <- encodeArray "ycoords" ys >>= fmap snd . decodeArray
+      dy `shouldBe` ys
+      dz <- encodeArray "zcoords" zs >>= fmap snd . decodeArray
+      dz `shouldBe` zs
+
+      let cx = Vec.fromList [0, 1, 2, 3 :: Int32]
+          ox = Vec.fromList [4 :: Int32]
+          tx = Vec.singleton VtkQuad
+      ci <- encodeArray "connectivity" cx >>= fmap snd . decodeArray
+      ci `shouldBe` cx
+      os <- encodeArray "offsets" ox >>= fmap snd . decodeArray
+      os `shouldBe` ox
+      ts <- encodeArray "types"   tx >>= fmap snd . decodeArray
+      ts `shouldBe` tx

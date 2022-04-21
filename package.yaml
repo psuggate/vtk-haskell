@@ -1,5 +1,5 @@
 name:                vtk-haskell
-version:             0.1.3.3
+version:             0.1.3.4
 github:              "githubuser/vtk-haskell"
 license:             BSD3
 author:              "Patrick Suggate"

@@ -47,29 +47,6 @@ compressPlusHeader bs =
       -- Base64 encode header plus each block seperately, before concatenating
   in  BL.encodeBase64 hx <> BL.encodeBase64 (BL.concat cs)
 
-{-- }
-decompress :: BL.ByteString -> BL.ByteString
-decompress bx = BL.concat cs where
-{-- }
-  bs = case BL.decodeBase64 bx of
-    Left er -> error $ "unable to decompress, " <> Text.unpack er
-    Right x -> x
---}
-  bs = BL.decodeBase64Lenient bx
-  n  = btoi 4 0 bs :: Int64
-  s  = btoi 4 4 bs :: Int64
-  -- l  = btoi 4 8 bs :: Int64 -- unused: size of last chunk
-  h  = 4*(n+3) -- header size
-  cs = Z.decompress <$> bchunks s (BL.drop h bs)
-
-decompress :: BL.ByteString -> BL.ByteString
-decompress bx = BL.concat cs
-  where
-    (hx, bs) = splitAtHeader bx
-    s  = btoi 4 4 hx :: Int64
-    cs = Z.decompress <$> bchunks s bs
---}
-
 decompress :: BL.ByteString -> BL.ByteString
 decompress bx = BL.concat cs
   where
@@ -95,10 +72,14 @@ cchunks     _   _ = []
 ------------------------------------------------------------------------------
 -- | @ByteString@ to an @Integral@ type.
 btoi :: forall i. (Bits i, Integral i) => Int64 -> Int64 -> BL.ByteString -> i
-btoi n i bs = go 0 n (i+n-1) where
-  go :: i -> Int64 -> Int64 -> i
-  go !x 0 _ = x
-  go !x c j = go (unsafeShiftL x 8 + fromIntegral (BL.index bs j)) (c-1) (j-1)
+btoi n i bs = go 0 n (i+n-1)
+-- btoi n i bs
+--   | BL.length bs < n+i = error "given ByteString is too short"
+--   | otherwise          = go 0 n (i+n-1)
+  where
+    go :: i -> Int64 -> Int64 -> i
+    go !x 0 _ = x
+    go !x c j = go (unsafeShiftL x 8 + fromIntegral (BL.index bs j)) (c-1) (j-1)
 {-# INLINE btoi #-}
 
 -- | @ByteString@ to an @Integral@ type, and using Big Endian byte-ordering.
