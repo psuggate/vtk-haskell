@@ -60,6 +60,12 @@ import qualified Text.PrettyPrint.Leijen.Text as P
 -- * VTK data types
 ------------------------------------------------------------------------------
 -- | Top-level, unstructured-mesh data type.
+--
+--   TODO:
+--    + non-default attributes;
+--    + proper support for multiple pieces;
+--    + 3D "meshes";
+--
 newtype VTU
   = VTU [Piece]
   deriving (Eq, Generic, NFData)

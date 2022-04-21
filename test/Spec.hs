@@ -1,51 +1,35 @@
-{-# LANGUAGE LambdaCase, OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Main where
 
-import qualified Data.VTK.Parser       as Mega
-import           Data.VTK.Types
-import           Data.VTK.Unstructured as Unst
-import qualified Data.VTK.Xeno         as Xeno
+import qualified Data.VTK.DataArraySpec as Data
+import           Data.VTK.Unstructured  as Unst
+import qualified Data.VTK.XenoSpec      as Xeno
 import           Test.Hspec
+import           Test.VTK.Utils
+
+-- import qualified Data.VTK.Parser        as Mega
 
 
--- * Defaults
+-- * Assorted tests
 ------------------------------------------------------------------------------
-filePath :: FilePath
-filePath  = "unstructured.vtu"
+vtkTests :: Spec
+vtkTests  = context "Top-level VTK tests" $ do
 
-emptyVTU :: VTU
-emptyVTU  = VTU [ Piece ps pd cs cd ]
-  where
-    ps = PointsStriped $ Coordinates dx dy dz
-    dx = DataArray "Float32" 0 1 "xcoords" ""
-    dy = DataArray "Float32" 0 1 "ycoords" ""
-    dz = DataArray "Float32" 0 1 "zcoords" ""
-    cs = Cells (DataArray "Int32" 0 1 "connectivity" "")
-               (DataArray "Float32" 0 1 "offsets" "")
-               (DataArray "UInt8" 0 1 "types" "")
-    pd = PointData [] [] [] [] []
-    cd = CellData [] [] [] [] []
+  describe "General-purpose I/O VTU tests" $ do
 
-emptyVTK :: Mega.VtkFile
-emptyVTK  = Mega.VtkFile attrs [piece]
-  where
-    attrs = Mega.VtkAttrs Mega.VtkUnstructuredGrid "0.1" "vtkZLibDataCompressor" ()
-    piece = Mega.VtkPiece Mega.VtkUnstructuredGrid verts cells
-    verts = Mega.VtkPointsStriped mempty mempty mempty
-    cells = Mega.VtkCells VtkQuad mempty
+    it "can read an empty VTU file" $ do
+      vtu <- Unst.readFileVTU filePath
+      vtu `shouldBe` emptyVTU
 
 
 -- * Top-level tests
 ------------------------------------------------------------------------------
 tests :: Spec
-tests  = context "VTK unstructured-grid tests" $ do
-
-  describe "Xeno-based VTU tests" $ do
-
-    it "can read an empty VTU file" $ do
-      vtu <- VTU . Xeno.pieces <$> Xeno.parseUnstructuredMeshFile filePath
-      vtu `shouldBe` emptyVTU
+tests  = do
+  Data.spec
+  Xeno.spec
+  vtkTests
 
 {-- }
   describe "MegaParsec-based VTU tests" $ do
@@ -54,12 +38,6 @@ tests  = context "VTK unstructured-grid tests" $ do
       vtk <- Mega.parseUnstructuredMesh filePath
       vtk `shouldBe` Just emptyVTK
 --}
-
-  describe "General-purpose I/O VTU tests" $ do
-
-    it "can read an empty VTU file" $ do
-      vtu <- Unst.readFileVTU filePath
-      vtu `shouldBe` emptyVTU
 
 
 -- * Main entry-point

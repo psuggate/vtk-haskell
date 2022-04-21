@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: b3b42192a25a70e65ed4010409d9a36fee5545359a3dfd8f424e8e35d9a4e858
+-- hash: a0d9509756cbfd72a41f9eb2f6e8426ace79efad5dfb10a8c641ac106665b2ec
 
 name:           vtk-haskell
 version:        0.1.3.3
@@ -31,6 +31,7 @@ library
       Data.VTK.AsciiData
       Data.VTK.Core
       Data.VTK.DataArray
+      Data.VTK.DataArray.Internal
       Data.VTK.Parser
       Data.VTK.Types
       Data.VTK.Unstructured
@@ -84,6 +85,9 @@ test-suite vtk-haskell-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Data.VTK.DataArraySpec
+      Data.VTK.XenoSpec
+      Test.VTK.Utils
       Paths_vtk_haskell
   hs-source-dirs:
       test

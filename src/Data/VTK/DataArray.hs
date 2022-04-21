@@ -35,25 +35,19 @@ module Data.VTK.DataArray
   , toVector
   , toVectorIO
 
-  , decompress
   , setArrayProps
   )
 where
 
-import qualified Codec.Compression.Zlib       as Z
-import           Control.Arrow                (second)
 import           Control.DeepSeq              (NFData)
 import           Control.Monad                (when)
 import           Control.Monad.ST
-import           Data.Bits                    (Bits, unsafeShiftL, unsafeShiftR,
-                                               (.&.))
 import qualified Data.ByteString.Internal     as BS
 import qualified Data.ByteString.Lazy         as BL
-import qualified Data.ByteString.Lazy.Base64  as BL
-import qualified Data.Text                    as Text
 import           Data.Text.Lazy               (Text)
 import qualified Data.Text.Lazy               as Lazy
 import qualified Data.Text.Lazy.Encoding      as Text
+import           Data.VTK.DataArray.Internal
 import           Data.VTK.Types
 import           Data.Vector.Storable         (Vector)
 import qualified Data.Vector.Storable         as Vec
@@ -105,50 +99,50 @@ newtype VtkDataIOException
 instance VtkArray (Vector Word8) where
   encodeArray l xs =
     DataArray "UInt8" (Vec.length xs) 1 l <$> fromVector xs
-  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "UInt8" t n 1 d x
+  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "UInt8" t 1 d n x
 
 instance VtkArray (Vector VtkCellType) where
   encodeArray l xs =
     DataArray "UInt8" (Vec.length xs) 1 l <$> fromVector xs
-  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "UInt8" t n 1 d x
+  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "UInt8" t 1 d n x
 
 ------------------------------------------------------------------------------
 instance VtkArray (Vector Int32) where
   encodeArray l xs =
     DataArray "Int32" (Vec.length xs) 1 l <$> fromVector xs
-  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Int32" t n 1 d x
+  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Int32" t 1 d n x
 
 instance VtkArray (Vector Int64) where
   encodeArray l xs =
     DataArray "Int64" (Vec.length xs) 1 l <$> fromVector xs
-  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Int64" t n 1 d x
+  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Int64" t 1 d n x
 
 instance VtkArray (Vector Int) where
   encodeArray l xs =
     DataArray "Int64" (Vec.length xs) 1 l <$> fromVector xs
-  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Int64" t n 1 d x
+  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Int64" t 1 d n x
 
 ------------------------------------------------------------------------------
 instance VtkArray (Vector Float) where
   encodeArray l xs =
     DataArray "Float32" (Vec.length xs) 1 l <$> fromVector xs
-  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Float32" t n 1 d x
+  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Float32" t 1 d n x
 
 instance VtkArray (Vector (V3 Float)) where
   encodeArray l xs =
     DataArray "Float32" (Vec.length xs) 3 l <$> fromVector xs
-  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Float32" t n 3 d x
+  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Float32" t 3 d n x
 
 ------------------------------------------------------------------------------
 instance VtkArray (Vector Double) where
   encodeArray l xs =
     DataArray "Float64" (Vec.length xs) 1 l <$> fromVector xs
-  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Float64" t n 1 d x
+  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Float64" t 1 d n x
 
 instance VtkArray (Vector (V3 Double)) where
   encodeArray l xs =
     DataArray "Float64" (Vec.length xs) 3 l <$> fromVector xs
-  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Float64" t n 3 d x
+  decodeArray (DataArray t n d l x) = (l,) <$> toVectorIO "Float64" t 3 d n x
 
 
 -- ** Exception-handling
@@ -166,7 +160,13 @@ fromVector xs = Vec.unsafeWith xs $ \p -> do
   compressPlusHeader . BL.fromStrict <$> BS.create n f
 {-# INLINE[2] fromVector #-}
 
--- todo: make faster, as this is fairly slow
+------------------------------------------------------------------------------
+-- | Decode (from base64), decompress, then convert into an array of type @a@.
+--
+--   TODO:
+--    + make faster, as this is fairly slow
+--    + testbenches
+--
 toVector :: forall a. Storable a => Text -> Vector a
 toVector ts
   | Lazy.null ts = Vec.empty
@@ -187,9 +187,9 @@ toVector ts
 -- | Array deserialisation with exception-handling.
 --
 --   NOTE:
---     + compares @Text@ representations of types, array dimensions, and array
---       length (vs. the desired values) when deserialising the contents of an
---       array;
+--    + compares @Text@ representations of types, array dimensions, and array
+--      length (vs. the desired values) when deserialising the contents of an
+--      array;
 --
 toVectorIO
   :: Storable a
@@ -199,54 +199,13 @@ toVectorIO
   -> Text
   -> IO (Vector a)
 toVectorIO t0 t1 d0 d1 n ts = do
+  print ts
   when (t0 /= t1) $ typeErrorIO t0 t1
   when (d0 /= d1) $ dimsErrorIO d0 d1
   let x = toVector ts
       m = Vec.length x
   if m /= n then sizeErrorIO n m else pure x
 {-# INLINE[2] toVectorIO #-}
-
-
--- * Compression
-------------------------------------------------------------------------------
--- | Break the given @ByteString@ into chunks, compress these, and then pre-
---   pend a header.
---
---   NOTE:
---    + see 'sc_vtk_write_compressed' (from 'sc_io.c') for the source-code
---      that was used to determine the header format;
---
-compressPlusHeader :: BL.ByteString -> Text
-compressPlusHeader bs =
-  let s  = 1 `unsafeShiftL` 15           -- block-size
-      l  = BL.length bs .&. pred s       -- 'lastsize'
-      n  = (BL.length bs + s - 1) `unsafeShiftR` 15 -- num blocks
-      o  = if l > 0 || BL.null bs then l else s
-
-      -- Break into 32 KiB blocks, and then Z-compress
-      cs = Z.compress <$> bchunks s bs
-
-      -- Compute the header structure
-      os = Vec.fromList . map w32 $ [n, s, o] ++ BL.length `map` cs
-      hx = BL.pack . Vec.toList $ Vec.unsafeCast os
-
-      w32 :: Integral i => i -> Word32
-      w32  = fromIntegral
-      {-# INLINE w32 #-}
-
-      -- Base64 encode header plus each block seperately, before concatenating
-  in  BL.encodeBase64 hx <> BL.encodeBase64 (BL.concat cs)
-
-decompress :: BL.ByteString -> BL.ByteString
-decompress bx = BL.concat cs where
-  bs = case BL.decodeBase64 bx of
-    Left er -> error $ Text.unpack er
-    Right x -> x
-  n  = btoi 4 0 bs :: Int64
-  s  = btoi 4 4 bs :: Int64
-  -- l  = btoi 4 8 bs :: Int64 -- unused: size of last chunk
-  h  = 4*(n+3) -- header size
-  cs = Z.decompress <$> bchunks s (BL.drop h bs)
 
 
 -- * Exception handling
@@ -265,22 +224,6 @@ sizeErrorIO d = throwIO . VtkDataIOException .
 
 
 -- * Helpers
-------------------------------------------------------------------------------
--- | Break the given @ByteString@ into @n@-sized chunks.
-bchunks :: Int64 -> BL.ByteString -> [BL.ByteString]
-bchunks n = go where
-  go :: BL.ByteString -> [BL.ByteString]
-  go !bs | BL.null bs = []
-         | otherwise  = uncurry (:) . second go $ BL.splitAt n bs
-
-------------------------------------------------------------------------------
--- | @ByteString@ to an @Integral@ type.
-btoi :: forall i. (Bits i, Integral i) => Int64 -> Int64 -> BL.ByteString -> i
-btoi n i bs = go 0 n i where
-  go :: i -> Int64 -> Int64 -> i
-  go !x 0 _ = x
-  go !x c j = go (unsafeShiftL x 8 + fromIntegral (BL.index bs j)) (c-1) (j+1)
-
 ------------------------------------------------------------------------------
 -- | Set the array-length and dimensions using the indicated element-type, and
 --   array-data.

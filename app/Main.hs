@@ -23,7 +23,8 @@ testUnstructured  = do
       dy = DataArray "Float32" 0 1 "ycoords" ""
       dz = DataArray "Float32" 0 1 "zcoords" ""
       cs = Cells (DataArray "Int32" 0 1 "connectivity" "")
-                 (DataArray "Float32" 0 1 "offsets" "")
+--                  (DataArray "Float32" 0 1 "offsets" "")
+                 (DataArray "Int32" 0 1 "offsets" "")
                  (DataArray "UInt8" 0 1 "types" "")
       pd = PointData [] [] [] [] []
       cd = CellData [] [] [] [] []
