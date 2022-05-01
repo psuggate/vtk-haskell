@@ -22,6 +22,7 @@ module Data.VTK.DataArray
   (
     -- Type classes
     VtkArray (..)
+  , vtkArray
 
     -- Data types
   , DataArray (..)
@@ -228,9 +229,9 @@ sizeErrorIO d = throwIO . VtkDataIOException .
 -- | Set the array-length and dimensions using the indicated element-type, and
 --   array-data.
 setArrayProps :: DataArray -> DataArray
-setArrayProps (DataArray typ _ _ label tx) =
+setArrayProps (DataArray typ _ d label tx) =
   let xs = toVector tx :: Vector Word8
-      n  = Vec.length xs
+      n  = Vec.length xs `div` d
       s  = case typ of
         "UInt8"   -> 1
         "UInt16"  -> 2
@@ -243,4 +244,11 @@ setArrayProps (DataArray typ _ _ label tx) =
         "Float32" -> 4
         "Float64" -> 8
         _         -> -1
-  in  DataArray typ (n `div` s) 1 label tx
+  in  DataArray typ (n `div` s) d label tx
+
+
+-- * Legacy
+------------------------------------------------------------------------------
+vtkArray :: VtkArray a => Text -> a -> IO DataArray
+vtkArray  = encodeArray
+{-# DEPRECATED vtkArray "replaced by 'encodeArray'" #-}

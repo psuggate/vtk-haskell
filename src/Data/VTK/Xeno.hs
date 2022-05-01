@@ -10,7 +10,7 @@ module Data.VTK.Xeno
   )
 where
 
-import           Control.Arrow              ((***), (<<<))
+import           Control.Arrow              ((***), (<<<), (|||))
 import           Control.Monad              (unless, (>=>))
 import qualified Data.ByteString.Char8      as BS
 import qualified Data.ByteString.Lazy.Char8 as BL
@@ -190,19 +190,28 @@ optional label missing parser = go where
 
 -- ** Parsers for @DataArray@'s
 ------------------------------------------------------------------------------
+-- | Build a @DataArray@ from the given XML node.
+--
+--   TODO:
+--    + support for the 'NumberOfComponents' attribute;
+--
 getDataArray :: Xeno.Node -> Either VtkParseException DataArray
 getDataArray node
   | name node == "DataArray"
   , length attrs >= 3 = fmap setArrayProps $ DataArray
                         <$> ltext `fmap` getAttribute "type" attrs
                         <*> pure (-1)
-                        <*> pure (-1)
+                        <*> getNumberOfComponents attrs
                         <*> ltext `fmap` getAttribute "Name" attrs
                         <*> (pure . ltext . BS.concat . textOf) node
   | otherwise = throwE "invalid 'DataArray'"
   where
     ltext = Text.decodeUtf8 . BL.fromStrict
     attrs = attributes node
+
+getNumberOfComponents :: XmlAttrs -> Either VtkParseException Int
+getNumberOfComponents  =
+  Right . (const 1 ||| read . BS.unpack) . getAttribute "NumberOfComponents"
 
 getDataArrayNamed
   :: BS.ByteString
@@ -241,6 +250,7 @@ checkAttrs ((k, v):xs) = case k of
 
 -- * Helpers
 ------------------------------------------------------------------------------
+-- TODO: should only strip leading and trailing whitespace?
 textOf :: Xeno.Node -> [BS.ByteString]
 textOf  = go . contents where
   go         []  = []
