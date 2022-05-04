@@ -16,7 +16,7 @@ filePath  = "unstructured.vtu"
 ------------------------------------------------------------------------------
 testUnstructured :: IO ()
 testUnstructured  = do
-  let mesh = VTU [ Piece ps pd cs cd
+  let mesh = VTU [ Piece ps pd cs cd NoVerts NoLines NoStrips NoPolys
                  ]
       ps = PointsStriped $ Coordinates dx dy dz
       dx = DataArray "Float32" 0 1 "xcoords" ""

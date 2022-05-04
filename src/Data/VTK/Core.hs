@@ -34,6 +34,11 @@ module Data.VTK.Core
   , Cells (..)
   , CellData (..)
 
+  , Verts (..)
+  , Lines (..)
+  , Strips (..)
+  , Polys (..)
+
   , noPointData
   , noCellData
 
@@ -61,7 +66,7 @@ class VtkDoc a where
 ------------------------------------------------------------------------------
 -- | Mesh substructures.
 data Piece
-  = Piece !Points !PointData !Cells !CellData
+  = Piece !Points !PointData !Cells !CellData !Verts !Lines !Strips !Polys
   deriving (Eq, Generic, NFData, Show)
 
 
@@ -93,10 +98,55 @@ data PointData
       }
   deriving (Eq, Generic, NFData, Show)
 
+------------------------------------------------------------------------------
+-- | Topological vertices.
+data Verts
+  = Verts
+      { vertConnect :: !DataArray
+      , vertOffsets :: !DataArray
+      }
+  | NoVerts
+  deriving (Eq, Generic, NFData, Show)
+
+
+-- ** Edge data
+------------------------------------------------------------------------------
+data Lines
+  = Lines
+      { lineConnect :: !DataArray
+      , lineOffsets :: !DataArray
+      }
+  | NoLines
+  deriving (Eq, Generic, NFData, Show)
+
 
 -- ** Polygon data
 ------------------------------------------------------------------------------
+-- | Generic polygons.
+data Polys
+  = Polys
+      { polyConnect :: !DataArray
+      , polyOffsets :: !DataArray
+      }
+  | NoPolys
+  deriving (Eq, Generic, NFData, Show)
+
+------------------------------------------------------------------------------
+-- | Triangle-strips.
+data Strips
+  = Strips
+      { stripConnect :: !DataArray
+      , stripOffsets :: !DataArray
+      }
+  | NoStrips
+  deriving (Eq, Generic, NFData, Show)
+
+------------------------------------------------------------------------------
 -- | Currently just quadrants.
+--
+--   TODO:
+--    + moar!
+--
 data Cells
   = Cells
       { connectivity :: !DataArray
@@ -193,7 +243,7 @@ instance VtkDoc DataArray where
 ------------------------------------------------------------------------------
 -- | Pretty-print pieces of a VTU.
 instance VtkDoc Piece where
-  dshow (Piece ps pd cs cd) =
+  dshow (Piece ps pd cs cd _ _ _ _) =
     let px = P.angles $ "Piece " <> np <> P.char ' ' <> nc
         np = "NumberOfPoints=" <> quotes (numPoints ps)
         nc = "NumberOfCells=" <> quotes (numCells cs)

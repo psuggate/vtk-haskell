@@ -91,7 +91,7 @@ unstructuredGrid node
 ------------------------------------------------------------------------------
 getPiece :: Xeno.Node -> Either VtkParseException Piece
 getPiece node
-  | label == "Piece" = Piece <$> ps <*> pd <*> cs <*> cd
+  | label == "Piece" = Piece <$> ps <*> pd <*> cs <*> cd <*> vs <*> ls <*> ss <*> xs
   | otherwise = throwE "invalid 'Piece'"
   where
     label = name node
@@ -102,6 +102,11 @@ getPiece node
     cs = node `itsOnly` "Cells" >>= getCells
     -- cs = element "Cells" getCells nodes
     cd = optional "CellData" (Right mempty) getCellData nodes
+    -- TODO:
+    vs = Right NoVerts
+    ls = Right NoLines
+    ss = Right NoStrips
+    xs = Right NoPolys
 
 
 -- ** Points parsers

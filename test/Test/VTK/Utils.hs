@@ -15,7 +15,7 @@ filePath :: FilePath
 filePath  = "unstructured.vtu"
 
 emptyVTU :: VTU
-emptyVTU  = VTU [ Piece ps pd cs cd ]
+emptyVTU  = VTU [ Piece ps pd cs cd NoVerts NoLines NoStrips NoPolys ]
   where
     ps = PointsStriped $ Coordinates dx dy dz
     dx = DataArray "Float32" 0 1 "xcoords" ""
@@ -49,4 +49,4 @@ squareVTU  = do
       pd = PointData [] [] [] [] []
       cd = CellData [] [] [] [] []
 
-  pure $ VTU [ Piece ps pd cs cd ]
+  pure $ VTU [ Piece ps pd cs cd NoVerts NoLines NoStrips NoPolys ]
