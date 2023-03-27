@@ -11,9 +11,17 @@ import           Data.Text.Lazy       (Text)
 import           Data.VTK.Types
 import           Data.Vector.Storable (Vector)
 import           GHC.Generics         (Generic)
-import           Linear               (V3)
+import           Linear               (M33, V3)
 
 -- import GHC.Word
+
+
+-- * API
+------------------------------------------------------------------------------
+{-- }
+class HasName t where
+  nameOf :: Lens' t Text
+--}
 
 
 -- * Unstructured-grid data types
@@ -27,21 +35,21 @@ import           Linear               (V3)
 --    + only support @Double@-precision floating-point?
 --
 data UnstructuredGrid a where
-  UnstructuredGrid :: Piece t -> UnstructuredGrid ts -> UnstructuredGrid (t : ts)
+  UnstructuredGrid :: Piece Int Double t -> UnstructuredGrid ts -> UnstructuredGrid (t : ts)
   Nil :: UnstructuredGrid '[]
 
 ------------------------------------------------------------------------------
 -- | Mesh substructures.
-data Piece t
+data Piece i a t
   = Piece
-      { piecePoints    :: !(Points t)
+      { piecePoints    :: !(Points a)
       , piecePointData :: !(PointData t)
-      , pieceCells     :: !Cells
+      , pieceCells     :: !(Cells i)
       , pieceCellData  :: !(CellData t)
-      , pieceVerts     :: !Verts
-      , pieceLines     :: !Lines
-      , pieceStrips    :: !Strips
-      , piecePolys     :: !Polys
+      , pieceVerts     :: !(Verts i)
+      , pieceLines     :: !(Lines i)
+      , pieceStrips    :: !(Strips i)
+      , piecePolys     :: !(Polys i)
       }
   deriving (Eq, Generic, NFData, Show)
 
@@ -54,6 +62,16 @@ data DataArray a
       , _dataOf :: !(Vector a)
       }
   deriving (Eq, Generic, NFData, Show)
+
+------------------------------------------------------------------------------
+-- | Lists of @DataArrays@, so that field-data can be stored.
+data ArrayList i a where
+  BooleanArray :: DataArray Bool -> ArrayList i a -> ArrayList i a
+  ScalarArray :: DataArray a -> ArrayList i a -> ArrayList i a
+  VectorArray :: DataArray (V3 a) -> ArrayList i a -> ArrayList i a
+  TensorArray :: DataArray (M33 a) -> ArrayList i a -> ArrayList i a
+  IntegerArray :: DataArray i -> ArrayList i a -> ArrayList i a
+  ListEnd :: ArrayList i a
 
 
 -- ** Vertex data
@@ -86,10 +104,10 @@ data PointData a
 
 ------------------------------------------------------------------------------
 -- | Topological vertices.
-data Verts
+data Verts i
   = Verts
-      { vertConnect :: !(DataArray Int)
-      , vertOffsets :: !(DataArray Int)
+      { vertConnect :: !(DataArray i)
+      , vertOffsets :: !(DataArray i)
       }
   | NoVerts
   deriving (Eq, Generic, NFData, Show)
@@ -97,10 +115,10 @@ data Verts
 
 -- ** Edge data
 ------------------------------------------------------------------------------
-data Lines
+data Lines i
   = Lines
-      { lineConnect :: !(DataArray Int)
-      , lineOffsets :: !(DataArray Int)
+      { lineConnect :: !(DataArray i)
+      , lineOffsets :: !(DataArray i)
       }
   | NoLines
   deriving (Eq, Generic, NFData, Show)
@@ -109,20 +127,20 @@ data Lines
 -- ** Polygon data
 ------------------------------------------------------------------------------
 -- | Generic polygons.
-data Polys
+data Polys i
   = Polys
-      { polyConnect :: !(DataArray Int)
-      , polyOffsets :: !(DataArray Int)
+      { polyConnect :: !(DataArray i)
+      , polyOffsets :: !(DataArray i)
       }
   | NoPolys
   deriving (Eq, Generic, NFData, Show)
 
 ------------------------------------------------------------------------------
 -- | Triangle-strips.
-data Strips
+data Strips i
   = Strips
-      { stripConnect :: !(DataArray Int)
-      , stripOffsets :: !(DataArray Int)
+      { stripConnect :: !(DataArray i)
+      , stripOffsets :: !(DataArray i)
       }
   | NoStrips
   deriving (Eq, Generic, NFData, Show)
@@ -133,10 +151,10 @@ data Strips
 --   TODO:
 --    + moar!
 --
-data Cells
+data Cells i
   = Cells
-      { connectivity :: !(DataArray Int)
-      , cellOffsets  :: !(DataArray Int)
+      { connectivity :: !(DataArray i)
+      , cellOffsets  :: !(DataArray i)
       , cellTypes    :: !(DataArray VtkCellType)
       }
   deriving (Eq, Generic, NFData, Show)

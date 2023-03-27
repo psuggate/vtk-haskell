@@ -6,7 +6,7 @@ import qualified Data.VTK.DataArraySpec as Data
 import           Data.VTK.Unstructured  as Unst
 import qualified Data.VTK.XenoSpec      as Xeno
 import           Test.Hspec
-import           Test.VTK.Utils
+import           Test.VTK.Utils         (emptyVTU, filePath)
 
 -- import qualified Data.VTK.Parser        as Mega
 

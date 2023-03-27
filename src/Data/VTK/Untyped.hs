@@ -1,57 +1,63 @@
-{-# LANGUAGE DeriveAnyClass, DeriveGeneric, FlexibleInstances, GADTs,
-             LambdaCase, OverloadedStrings, PatternSynonyms,
-             ScopedTypeVariables, TemplateHaskell, TupleSections #-}
+{-# LANGUAGE FlexibleInstances, GADTs, LambdaCase, OverloadedStrings,
+             ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 ------------------------------------------------------------------------------
 -- |
--- Module      : Data.VTK.Core
--- Copyright   : (C) Patrick Suggate, 2021
+-- Module      : Data.VTK.Untyped
+-- Copyright   : (C) Patrick Suggate, 2023
 -- License     : BSD3
 --
 -- Maintainer  : Patrick Suggate <patrick.suggate@gmail.com>
 -- Stability   : Experimental
 -- Portability : non-portable
 --
--- Parser for VTK files.
+-- Representations and functions for VTK, unstructured meshes, and without
+-- using extra (Haskell) data types to constrain the VTU scalar/vector fields.
 --
 -- == Changelog
---  - 08/07/2021  --  initial file;
---
--- == TODO
---  - move most of this stuff to 'Data.VTK.Emit'?
+--  - 26/03/2023  --  initial file;
 --
 ------------------------------------------------------------------------------
 
-module Data.VTK.Core
+module Data.VTK.Untyped
   (
-    VtkDoc (..)
+    -- Re-exports
+    module Data.VTK.Types
 
+    -- Type classes
+  , VtkDoc (..)
+  , VtkArray (..)
+
+    -- Data types
+  , VTU (..)
   , Piece (..)
   , Points (..)
   , Coordinates (..)
-  , PointData (..)
   , Cells (..)
+  , PointData (..)
   , CellData (..)
+  , DataArray (..)
 
-  , Verts (..)
-  , Lines (..)
-  , Strips (..)
-  , Polys (..)
+    -- I/O
+  , renderToByteString
+  , writeFileVTU
 
+    -- Conversions
+  , fromVector
+
+    -- Helpers
   , noPointData
   , noCellData
-
-  , module Data.VTK.DataArray
-  , module Data.VTK.Types
   )
 where
 
-import           Control.DeepSeq              (NFData)
+import           Control.Monad.IO.Class
+import qualified Data.ByteString.Lazy         as BL
 import qualified Data.Text.Lazy               as L
+import qualified Data.Text.Lazy.Encoding      as E
 import           Data.VTK.DataArray
 import           Data.VTK.Types
-import           GHC.Generics                 (Generic)
 import           Text.PrettyPrint.Leijen.Text (Doc)
 import qualified Text.PrettyPrint.Leijen.Text as P
 
@@ -64,14 +70,13 @@ class VtkDoc a where
 
 -- * VTK data types
 ------------------------------------------------------------------------------
+-- | Top-level, unstructured-mesh data type.
+newtype VTU
+  = VTU [Piece]
+
 -- | Mesh substructures.
---
---   TODO:
---    + specialise for 'PolyData' meshes versus 'UnstructuredGrid'?
---
 data Piece
-  = Piece !Points !PointData !Cells !CellData !Verts !Lines !Strips !Polys
-  deriving (Eq, Generic, NFData, Show)
+  = Piece !Points !PointData !Cells !CellData
 
 
 -- ** Vertex data
@@ -79,7 +84,6 @@ data Piece
 data Points
   = PointsChunked !DataArray
   | PointsStriped !Coordinates
-  deriving (Eq, Generic, NFData, Show)
 
 ------------------------------------------------------------------------------
 -- | Coordinates of vertices ('Points') are required to have three (spatial)
@@ -90,7 +94,6 @@ data Coordinates
       , ycoords :: !DataArray
       , zcoords :: !DataArray
       }
-  deriving (Eq, Generic, NFData, Show)
 
 data PointData
   = PointData
@@ -100,64 +103,17 @@ data PointData
       , ptensors :: [DataArray]
       , ptcoords :: [DataArray]
       }
-  deriving (Eq, Generic, NFData, Show)
-
-------------------------------------------------------------------------------
--- | Topological vertices.
-data Verts
-  = Verts
-      { vertConnect :: !DataArray
-      , vertOffsets :: !DataArray
-      }
-  | NoVerts
-  deriving (Eq, Generic, NFData, Show)
-
-
--- ** Edge data
-------------------------------------------------------------------------------
-data Lines
-  = Lines
-      { lineConnect :: !DataArray
-      , lineOffsets :: !DataArray
-      }
-  | NoLines
-  deriving (Eq, Generic, NFData, Show)
 
 
 -- ** Polygon data
 ------------------------------------------------------------------------------
--- | Generic polygons.
-data Polys
-  = Polys
-      { polyConnect :: !DataArray
-      , polyOffsets :: !DataArray
-      }
-  | NoPolys
-  deriving (Eq, Generic, NFData, Show)
-
-------------------------------------------------------------------------------
--- | Triangle-strips.
-data Strips
-  = Strips
-      { stripConnect :: !DataArray
-      , stripOffsets :: !DataArray
-      }
-  | NoStrips
-  deriving (Eq, Generic, NFData, Show)
-
-------------------------------------------------------------------------------
 -- | Currently just quadrants.
---
---   TODO:
---    + moar!
---
 data Cells
   = Cells
       { connectivity :: !DataArray
       , cellOffsets  :: !DataArray
       , cellTypes    :: !DataArray
       }
-  deriving (Eq, Generic, NFData, Show)
 
 data CellData
   = CellData
@@ -167,28 +123,33 @@ data CellData
       , ctensors :: [DataArray]
       , ctcoords :: [DataArray]
       }
-  deriving (Eq, Generic, NFData, Show)
 
 
 -- * Instances
 ------------------------------------------------------------------------------
-instance Semigroup PointData where
-  PointData ss vs ns ts uv <> PointData sz vz nz tz uz =
-    PointData (ss <> sz) (vs <> vz) (ns <> nz) (ts <> tz) (uv <> uz)
-
-instance Monoid PointData where
-  mempty = PointData [] [] [] [] []
-
-------------------------------------------------------------------------------
-instance Semigroup CellData where
-  CellData ss vs ns ts uv <> CellData sz vz nz tz uz =
-    CellData (ss <> sz) (vs <> vz) (ns <> nz) (ts <> tz) (uv <> uz)
-
-instance Monoid CellData where
-  mempty = CellData [] [] [] [] []
+instance Show VTU where
+  show = show . dshow
 
 
 -- ** Pretty-printing instances
+------------------------------------------------------------------------------
+instance VtkDoc VTU where
+  dshow (VTU ps) = vtkfile doc where
+    doc = P.nest 2 ("<UnstructuredGrid>" P.<$> pcs
+                   ) P.<$> "</UnstructuredGrid>"
+    pcs = P.vsep (map dshow ps)
+
+instance VtkDoc Piece where
+  dshow (Piece ps pd cs cd) =
+    let px = P.angles $ "Piece " <> np <> P.char ' ' <> nc
+        np = "NumberOfPoints=" <> quotes (numPoints ps)
+        nc = "NumberOfCells=" <> quotes (numCells cs)
+    in  P.nest 2 (px        P.<$>
+                  dshow ps  P.<$>
+                  dshow pd  P.<$>
+                  dshow cs  P.<$>
+                  dshow cd) P.<$> "</Piece>"
+
 ------------------------------------------------------------------------------
 instance VtkDoc Cells where
   dshow (Cells co os ty) = P.nest 2 ("<Cells>" P.<$>
@@ -233,7 +194,6 @@ instance VtkDoc PointData where
       dat = P.vsep . map dshow $ ss ++ vs
 
 ------------------------------------------------------------------------------
--- | Pretty-printing of @DataArray@'s.
 instance VtkDoc DataArray where
   dshow (DataArray t _ d l xs) =
     let typ = "type=" <> P.dquotes (P.text t) <> P.char ' '
@@ -244,21 +204,24 @@ instance VtkDoc DataArray where
         hdr = P.angles $ "DataArray " <> atr :: Doc
     in  P.nest 2 (hdr P.<$> P.text xs) P.<$> "</DataArray>"
 
+
+-- * VTK encoding helpers
 ------------------------------------------------------------------------------
--- | Pretty-print pieces of a VTU.
-instance VtkDoc Piece where
-  dshow (Piece ps pd cs cd _ _ _ _) =
-    let px = P.angles $ "Piece " <> np <> P.char ' ' <> nc
-        np = "NumberOfPoints=" <> quotes (numPoints ps)
-        nc = "NumberOfCells=" <> quotes (numCells cs)
-    in  P.nest 2 (px        P.<$>
-                  dshow ps  P.<$>
-                  dshow pd  P.<$>
-                  dshow cs  P.<$>
-                  dshow cd) P.<$> "</Piece>"
+version :: Doc
+version  = "<?xml version=\"1.0\"?>"
+{-# INLINE[2] version #-}
+
+vtkfile :: Doc -> Doc
+vtkfile doc = version P.<$> P.nest 2 (hdr P.<$> doc) P.<$> "</VTKFile>" where
+  hdr = "<VTKFile " <> typ <> ver <> cmp <> b_o
+  typ = "type=\"UnstructuredGrid\" "
+  ver = "version=\"0.1\" "
+  cmp = "compressor=\"vtkZLibDataCompressor\" "
+  b_o = "byte_order=\"LittleEndian\">"
+{-# INLINE[2] vtkfile #-}
 
 
--- * Smart constructors
+-- ** Smart constructors
 ------------------------------------------------------------------------------
 noPointData :: PointData
 noPointData  = PointData [] [] [] [] []
@@ -277,6 +240,16 @@ numPoints _ = error "Data.VTK.Unstructured.numPoints: internal error"
 numCells :: Cells -> Int
 numCells (Cells _ _ (DataArray _ n 1 _ _)) = n
 numCells _ = error "Data.VTK.Unstructured.numCells: internal error"
+
+
+-- * I/O
+------------------------------------------------------------------------------
+renderToByteString :: Doc -> BL.ByteString
+-- renderToByteString  = E.encodeUtf8 . P.displayT . P.renderOneLine
+renderToByteString  = E.encodeUtf8 . P.displayT . P.renderPretty 1.0 maxBound
+
+writeFileVTU :: MonadIO m => FilePath -> VTU -> m ()
+writeFileVTU fp = liftIO . BL.writeFile fp . renderToByteString . dshow
 
 
 -- * Helper functions
