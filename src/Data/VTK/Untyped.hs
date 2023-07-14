@@ -1,5 +1,5 @@
-{-# LANGUAGE FlexibleInstances, GADTs, LambdaCase, OverloadedStrings,
-             ScopedTypeVariables #-}
+{-# LANGUAGE DeriveGeneric, FlexibleInstances, GADTs, LambdaCase,
+             OverloadedStrings, ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 ------------------------------------------------------------------------------
@@ -58,6 +58,7 @@ import qualified Data.Text.Lazy               as L
 import qualified Data.Text.Lazy.Encoding      as E
 import           Data.VTK.DataArray
 import           Data.VTK.Types
+import           GHC.Generics                 (Generic)
 import           Text.PrettyPrint.Leijen.Text (Doc)
 import qualified Text.PrettyPrint.Leijen.Text as P
 
@@ -77,6 +78,24 @@ newtype VTU
 -- | Mesh substructures.
 data Piece
   = Piece !Points !PointData !Cells !CellData
+  deriving (Generic)
+
+------------------------------------------------------------------------------
+-- | Settings used when generating VTK files.
+data Settings
+  = Settings
+      { _compressed  :: Bool
+      , _coordinates :: Bool
+      , _dataformat  :: Format
+      }
+  deriving (Generic)
+
+-- | Data format to use within the generated VTK file.
+data Format
+  = Binary
+  | ASCII
+  | Appended
+  deriving (Bounded, Enum, Eq, Generic, Ord, Read, Show)
 
 
 -- ** Vertex data
